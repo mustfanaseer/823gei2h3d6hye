@@ -527,8 +527,8 @@ def main():
     print("="*60 + "\n")
 
     auto_update()
-    print()
-
+    print()   
+    
     os.makedirs("downloads", exist_ok=True)
     clean_old_files()
     start_cleanup_scheduler()
@@ -536,6 +536,7 @@ def main():
     application = (
         ApplicationBuilder()
         .token(BOT_TOKEN)
+        .concurrent_updates(True)  # <--- أضف هذا السطر فقط
         .build()
     )
 
