@@ -9,7 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from media_downloader import (
     detect_platform,
     download_media,
@@ -533,13 +533,7 @@ def main():
     clean_old_files()
     start_cleanup_scheduler()
 
-    application = (
-        ApplicationBuilder()
-        .token(BOT_TOKEN)
-        .concurrent_updates(True)  # <--- أضف هذا السطر فقط
-        .build()
-    )
-
+    application = Application.builder().token(BOT_TOKEN).build()
     start_daily_report_scheduler(application.bot)
 
     application.add_handler(CommandHandler("start", start_command))
