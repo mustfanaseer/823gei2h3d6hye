@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import logging
+import yt_dlp
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============== جلب رابط Cobalt من ملف .env ==============
-COBALT_API_URL = os.getenv("COBALT_API_URL", "https://cobalt-api-production-c677.up.railway.app/")
+COBALT_API_URL = os.getenv("COBALT_API_URL", "https://cobalt.tools/api/json")
 
 # ============== إحصائيات ==============
 stats = {"success_count": 0, "fail_count": 0}
@@ -32,10 +33,13 @@ def detect_platform(url: str) -> str:
         return "رابط خارجي 🌐"
 
 
+# ============================================================
+# 1️⃣ Cobalt API (المحاولة الأولى)
+# ============================================================
 def download_via_cobalt(url):
-    """إرسال الرابط إلى Cobalt API واستلام رابط التحميل المباشر"""
+    """إرسال الرابط إلى Cobalt API"""
     try:
-        logger.info(f"📤 إرسال الرابط إلى Cobalt: {url}")
+        logger.info(f"📤 [1/2] محاولة Cobalt API: {url}")
         
         payload = {
             "url": url,
@@ -45,7 +49,6 @@ def download_via_cobalt(url):
             "alwaysProxy": False
         }
         
-        # ✅ إضافة الـ Headers المطلوبة
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -57,32 +60,74 @@ def download_via_cobalt(url):
         
         if response.status_code == 200:
             data = response.json()
-            
             if data.get("status") in ["tunnel", "redirect", "success"]:
                 download_url = data.get("url")
                 if download_url:
-                    logger.info(f"✅ تم استلام رابط التحميل من Cobalt")
+                    logger.info(f"✅ Cobalt نجح!")
                     return download_file(download_url)
-                else:
-                    logger.error("❌ لم يتم العثور على رابط التحميل")
-                    return None
-            else:
-                error_msg = data.get("text", "خطأ غير معروف")
-                logger.error(f"❌ فشل التحميل: {error_msg}")
-                return None
         else:
-            logger.error(f"❌ خطأ في الاتصال بـ Cobalt: {response.status_code}")
-            logger.error(f"📄 الرد: {response.text[:200]}")
+            logger.warning(f"⚠️ Cobalt فشل: {response.status_code}")
             return None
             
-    except requests.exceptions.Timeout:
-        logger.error("❌ انتهى وقت الاتصال بـ Cobalt")
-        return None
     except Exception as e:
-        logger.error(f"❌ خطأ غير متوقع: {e}")
+        logger.warning(f"⚠️ Cobalt خطأ: {e}")
         return None
 
 
+# ============================================================
+# 2️⃣ yt-dlp (المحاولة الثانية - بدون كوكيز)
+# ============================================================
+def download_with_ytdlp(url):
+    """تحميل باستخدام yt-dlp (بدون كوكيز)"""
+    try:
+        logger.info(f"📤 [2/2] محاولة yt-dlp: {url}")
+        
+        # تحويل Shorts إلى رابط عادي
+        original_url = url
+        if "/shorts/" in url:
+            video_id = url.split("/shorts/")[1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل Shorts إلى: {url}")
+        
+        opts = {
+            "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
+            "format": "best[ext=mp4]/best",
+            "quiet": False,
+            "noplaylist": True,
+            "ignoreerrors": True,
+            "cookiefile": None,  # ❌ بدون كوكيز
+            "headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-us,en;q=0.5",
+            }
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            
+            if os.path.exists(file_path):
+                logger.info(f"✅ yt-dlp نجح!")
+                return file_path
+            
+            # البحث بامتدادات أخرى
+            for ext in ['.mp4', '.webm', '.mkv']:
+                test_path = file_path.rsplit('.', 1)[0] + ext
+                if os.path.exists(test_path):
+                    logger.info(f"✅ yt-dlp نجح (امتداد مختلف)!")
+                    return test_path
+                    
+        return None
+        
+    except Exception as e:
+        logger.warning(f"⚠️ yt-dlp فشل: {e}")
+        return None
+
+
+# ============================================================
+# دالة تحميل الملف من الرابط
+# ============================================================
 def download_file(download_url):
     """تحميل الملف من الرابط المباشر"""
     try:
@@ -102,9 +147,7 @@ def download_file(download_url):
             if not filename:
                 filename = f"media_{int(time.time())}.mp4"
         
-        # تنظيف اسم الملف
         filename = filename.replace('"', '').replace("'", "")
-        
         file_path = os.path.join("downloads", filename)
         os.makedirs("downloads", exist_ok=True)
         
@@ -114,28 +157,38 @@ def download_file(download_url):
                     f.write(chunk)
         
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            logger.info(f"✅ تم تحميل الملف: {filename}")
             return file_path
-        else:
-            return None
+        return None
             
     except Exception as e:
         logger.error(f"❌ فشل تحميل الملف: {e}")
         return None
 
 
+# ============================================================
+# الواجهة الرئيسية
+# ============================================================
 def download_media(url, bot=None, owner_id=None):
-    """الواجهة الرئيسية للتحميل"""
+    """الواجهة الرئيسية - تجربة طريقتين"""
     platform = detect_platform(url)
-    logger.info(f"🚀 بدء تحميل من: {platform} باستخدام Cobalt API")
+    logger.info(f"🚀 بدء تحميل من: {platform}")
     
+    # ====== 1️⃣ المحاولة الأولى: Cobalt ======
     result = download_via_cobalt(url)
     if result:
         stats["success_count"] += 1
         return result
     
+    # ====== 2️⃣ المحاولة الثانية: yt-dlp (لـ YouTube فقط) ======
+    if "youtube.com" in url or "youtu.be" in url:
+        result = download_with_ytdlp(url)
+        if result:
+            stats["success_count"] += 1
+            return result
+    
+    # ====== فشل كل شيء ======
     stats["fail_count"] += 1
-    logger.warning("⚠️ فشل التحميل عبر Cobalt")
+    logger.error(f"❌ فشلت جميع طرق التحميل: {url}")
     
     if bot and owner_id:
         try:
@@ -159,4 +212,4 @@ def reset_stats():
 
 
 def close_driver():
-    logger.info("✅ باستخدام Cobalt API (لا يحتاج متصفح)")
+    logger.info("✅ باستخدام Cobalt + yt-dlp")
