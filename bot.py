@@ -9,7 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes  # ✅ تم التعديل
 from media_downloader import (
     detect_platform,
     download_media,
@@ -401,7 +401,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 success, message = update_ytdlp()
                 if success:
                     await update.message.reply_text(message)
-                    # إشعار للمطور
                     from messages import get_dev_message
                     msg = get_dev_message("update_success", time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id=OWNER_ID)
                     await context.bot.send_message(chat_id=OWNER_ID, text=msg, parse_mode="Markdown")
@@ -533,7 +532,8 @@ def main():
     clean_old_files()
     start_cleanup_scheduler()
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    # ✅ تم التعديل هنا
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
     start_daily_report_scheduler(application.bot)
 
     application.add_handler(CommandHandler("start", start_command))
