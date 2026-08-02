@@ -527,8 +527,8 @@ def main():
     print("="*60 + "\n")
 
     auto_update()
-    print()   
-    
+    print()
+
     os.makedirs("downloads", exist_ok=True)
     clean_old_files()
     start_cleanup_scheduler()
