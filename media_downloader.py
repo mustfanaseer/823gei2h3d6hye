@@ -75,20 +75,26 @@ def download_via_cobalt(url):
 
 
 # ============================================================
-# 2️⃣ yt-dlp (المحاولة الثانية - بدون كوكيز)
+# 2️⃣ yt-dlp (المحاولة الثانية - مخصص لـ YouTube)
 # ============================================================
 def download_with_ytdlp(url):
-    """تحميل باستخدام yt-dlp (بدون كوكيز)"""
+    """تحميل YouTube (بما فيها Shorts) باستخدام yt-dlp بدون كوكيز"""
     try:
         logger.info(f"📤 [2/2] محاولة yt-dlp: {url}")
         
-        # تحويل Shorts إلى رابط عادي
-        original_url = url
+        # ✅ تحويل Shorts إلى رابط عادي
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل Shorts إلى: {url}")
         
+        # ✅ إذا كان الرابط مختصر (youtu.be)
+        if "youtu.be" in url:
+            video_id = url.split("/")[-1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل youtu.be إلى: {url}")
+        
+        # ✅ إعدادات yt-dlp المحسنة
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
             "format": "best[ext=mp4]/best",
@@ -96,10 +102,22 @@ def download_with_ytdlp(url):
             "noplaylist": True,
             "ignoreerrors": True,
             "cookiefile": None,  # ❌ بدون كوكيز
+            "extract_flat": False,
+            "prefer_insecure": True,  # ✅ لتجاوز بعض القيود
             "headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-us,en;q=0.5",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+            },
+            "throttledratelimit": 100000000,
+            "concurrent_fragment_downloads": 5,
+            # ✅ إعدادات إضافية لـ YouTube Shorts
+            "extractor_args": {
+                "youtube": {
+                    "skip": ["hls", "dash"],  # تجنب بعض التنسيقات
+                }
             }
         }
         
@@ -181,6 +199,7 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== 2️⃣ المحاولة الثانية: yt-dlp (لـ YouTube فقط) ======
     if "youtube.com" in url or "youtu.be" in url:
+        logger.info("🔄 استخدام yt-dlp كحل احتياطي لـ YouTube...")
         result = download_with_ytdlp(url)
         if result:
             stats["success_count"] += 1
