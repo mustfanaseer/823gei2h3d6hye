@@ -53,7 +53,7 @@ def download_image_from_url(image_url):
             ext = 'jpg'
 
         file_path = f"downloads/image_{int(time.time())}.{ext}"
-        
+
         with open(file_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -77,7 +77,7 @@ def extract_instagram_media(url):
     """استخراج فيديو أو صورة من Instagram مباشرة"""
     try:
         logger.info("📸 استخراج محتوى من Instagram...")
-        
+
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -96,7 +96,7 @@ def extract_instagram_media(url):
             video_url = og_video['content']
             if video_url.startswith('http'):
                 return download_file(video_url)
-        
+
         scripts = soup.find_all('script')
         for script in scripts:
             if script.string:
@@ -105,7 +105,7 @@ def extract_instagram_media(url):
                     video_url = matches[0].replace('\\/', '/')
                     if video_url.startswith('http'):
                         return download_file(video_url)
-                
+
                 matches = re.findall(r'"video_versions":[^}]*"url":"([^"]+)"', script.string)
                 if matches:
                     video_url = matches[0].replace('\\/', '/')
@@ -118,7 +118,7 @@ def extract_instagram_media(url):
             img_url = og_image['content']
             if img_url.startswith('http'):
                 return download_image_from_url(img_url)
-        
+
         for script in scripts:
             if script.string:
                 matches = re.findall(r'"display_url":"([^"]+)"', script.string)
@@ -141,12 +141,12 @@ def extract_tiktok_image(url):
     """استخراج صورة من TikTok"""
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
-        
+
         try:
             api_url = f"https://www.tikwm.com/api/"
             params = {"url": url, "count": 1}
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            
+
             response = requests.get(api_url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
@@ -186,70 +186,13 @@ def extract_tiktok_image(url):
 
 
 # ============================================================
-# تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
-# ============================================================
-def download_youtube_video(url):
-    """تحميل فيديو من YouTube (يدعم Shorts + fallback Cobalt فقط)"""
-    try:
-        logger.info(f"📤 تحميل فيديو من YouTube: {url}")
-
-        # تحويل روابط Shorts و youtu.be إلى صيغة قياسية
-        if "/shorts/" in url:
-            video_id = url.split("/shorts/")[1].split("?")[0]
-            url = f"https://youtube.com/watch?v={video_id}"
-            logger.info(f"🔄 تحويل Shorts إلى: {url}")
-
-        if "youtu.be" in url:
-            video_id = url.split("/")[-1].split("?")[0]
-            url = f"https://youtube.com/watch?v={video_id}"
-            logger.info(f"🔄 تحويل youtu.be إلى: {url}")
-
-        # 🟢 أولاً جرّب Cobalt مباشرة (أفضل على السيرفرات)
-        result = download_via_cobalt(url)
-        if result:
-            logger.info("✅ تم التحميل من Cobalt بنجاح")
-            return result
-
-        # 🔄 إذا فشل، استخدم yt-dlp كاحتياطي
-        opts = {
-            "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
-            "format": "bestvideo+bestaudio/best",
-            "quiet": False,
-            "noplaylist": True,
-            "ignoreerrors": True,
-            "cookiefile": os.path.join(os.path.dirname(__file__), "cookies.txt"),
-            "extract_flat": False,
-            "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-            "concurrent_fragment_downloads": 5,
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                if info:
-                    file_path = ydl.prepare_filename(info)
-                    if os.path.exists(file_path):
-                        logger.info("✅ تم التحميل عبر yt-dlp كاحتياطي")
-                        return file_path
-        except Exception as e:
-            logger.warning(f"⚠️ yt-dlp فشل: {e}")
-
-        return None
-
-    except Exception as e:
-        logger.warning(f"⚠️ فشل تحميل YouTube نهائيًا: {e}")
-        return None
-
-
-
-# ============================================================
 # Cobalt API (لتحميل الفيديو)
 # ============================================================
 def download_via_cobalt(url):
     """إرسال الرابط إلى Cobalt API لتحميل الفيديو"""
     try:
         logger.info(f"📤 محاولة Cobalt API: {url}")
-        
+
         payload = {
             "url": url,
             "downloadMode": "auto",
@@ -257,16 +200,16 @@ def download_via_cobalt(url):
             "audioFormat": "mp3",
             "alwaysProxy": False
         }
-        
+
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
-        
+
         api_url = COBALT_API_URL.rstrip('/') + '/'
         response = requests.post(api_url, json=payload, headers=headers, timeout=30)
-        
+
         if response.status_code == 200:
             data = response.json()
             if data.get("status") in ["tunnel", "redirect", "success"]:
@@ -277,9 +220,74 @@ def download_via_cobalt(url):
         else:
             logger.warning(f"⚠️ Cobalt فشل: {response.status_code}")
             return None
-            
+
     except Exception as e:
         logger.warning(f"⚠️ Cobalt خطأ: {e}")
+        return None
+
+
+# ============================================================
+# تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
+# ============================================================
+def download_youtube_video(url):
+    """تحميل فيديو من YouTube (يدعم Shorts)"""
+    try:
+        logger.info(f"📤 تحميل فيديو من YouTube: {url}")
+
+        # تحويل Shorts إلى رابط عادي
+        if "/shorts/" in url:
+            video_id = url.split("/shorts/")[1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل Shorts إلى: {url}")
+
+        if "youtu.be" in url:
+            video_id = url.split("/")[-1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل youtu.be إلى: {url}")
+
+        opts = {
+            "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
+            "format": "bestvideo+bestaudio/best",
+            "quiet": False,
+            "noplaylist": True,
+            "ignoreerrors": True,
+            "cookiefile": "cookies.txt",
+            "extract_flat": False,
+            "prefer_insecure": True,
+            "headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-us,en;q=0.5",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+            },
+            "throttledratelimit": 100000000,
+            "concurrent_fragment_downloads": 5,
+            "extractor_args": {
+                "youtube": {
+                    "skip": ["hls", "dash"],
+                }
+            }
+        }
+
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+
+            if os.path.exists(file_path):
+                logger.info(f"✅ تم تحميل الفيديو")
+                return file_path
+
+            for ext in ['.mp4', '.webm', '.mkv']:
+                test_path = file_path.rsplit('.', 1)[0] + ext
+                if os.path.exists(test_path):
+                    logger.info(f"✅ تم تحميل الفيديو (امتداد مختلف)")
+                    return test_path
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"⚠️ فشل تحميل YouTube: {e}")
         return None
 
 
@@ -292,11 +300,11 @@ def download_file(download_url):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
-        
+
         response = requests.get(download_url, headers=headers, stream=True, timeout=60)
         if response.status_code != 200:
             return None
-        
+
         content_disposition = response.headers.get('content-disposition', '')
         if 'filename=' in content_disposition:
             filename = content_disposition.split('filename=')[1].strip('"')
@@ -308,23 +316,23 @@ def download_file(download_url):
             filename = download_url.split('/')[-1].split('?')[0]
             if not filename:
                 filename = f"media_{int(time.time())}.mp4"
-        
+
         filename = filename.replace('"', '').replace("'", "").strip()
         if len(filename) < 5:
             filename = f"media_{int(time.time())}.mp4"
-        
+
         file_path = os.path.join("downloads", filename)
         os.makedirs("downloads", exist_ok=True)
-        
+
         with open(file_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
-        
+
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             return file_path
         return None
-            
+
     except Exception as e:
         logger.error(f"❌ فشل تحميل الملف: {e}")
         return None
@@ -337,31 +345,31 @@ def download_media(url, bot=None, owner_id=None):
     """الواجهة الرئيسية - يحمل فيديو أو صورة حسب الرابط"""
     platform = detect_platform(url)
     logger.info(f"🚀 بدء تحميل من: {platform}")
-    
+
     # ====== Instagram ======
     if "instagram.com" in url:
         result = extract_instagram_media(url)
         if result:
             stats["success_count"] += 1
             return result
-        
+
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
-    
+
     # ====== TikTok ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
-        
+
         result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
             return result
-    
+
     # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
         # 1️⃣ yt-dlp مع الكوكيز (الأولوية)
@@ -369,22 +377,22 @@ def download_media(url, bot=None, owner_id=None):
         if result:
             stats["success_count"] += 1
             return result
-        
+
         # 2️⃣ Cobalt (احتياطي)
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
-    
+
     # ====== منصات أخرى ======
     result = download_via_cobalt(url)
     if result:
         stats["success_count"] += 1
         return result
-    
+
     stats["fail_count"] += 1
     logger.error(f"❌ فشلت جميع طرق التحميل: {url}")
-    
+
     if bot and owner_id:
         try:
             from messages import get_dev_message
@@ -393,7 +401,7 @@ def download_media(url, bot=None, owner_id=None):
             asyncio.create_task(bot.send_message(chat_id=owner_id, text=msg, parse_mode="Markdown"))
         except:
             pass
-    
+
     return None
 
 
