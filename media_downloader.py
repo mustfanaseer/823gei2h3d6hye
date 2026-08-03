@@ -113,91 +113,51 @@ def extract_instagram_image(url):
 
 
 # ============================================================
-# TikTok (طريقة جديدة تعتمد على API)
+# TikTok
 # ============================================================
 def extract_tiktok_image(url):
-    """استخراج صورة من TikTok باستخدام API"""
+    """استخراج صورة من TikTok"""
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
         
-        # ====== الطريقة 1: استخدام TikTok API غير رسمي ======
+        # استخدام TikWM API
         try:
-            # استخدام خدمة خارجية لاستخراج البيانات
             api_url = f"https://www.tikwm.com/api/"
-            params = {
-                "url": url,
-                "count": 1
-            }
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            params = {"url": url, "count": 1}
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             
             response = requests.get(api_url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                if data.get('data') and data['data'].get('images'):
-                    # تحميل الصورة الأولى
-                    img_url = data['data']['images'][0]
-                    if img_url.startswith('http'):
-                        logger.info(f"✅ تم العثور على صورة عبر TikWM")
-                        return download_image_from_url(img_url)
-                if data.get('data') and data['data'].get('cover'):
-                    img_url = data['data']['cover']
-                    if img_url.startswith('http'):
-                        logger.info(f"✅ تم العثور على صورة عبر TikWM (cover)")
-                        return download_image_from_url(img_url)
-        except Exception as e:
-            logger.warning(f"⚠️ فشل TikWM: {e}")
+                if data.get('data'):
+                    if data['data'].get('images') and len(data['data']['images']) > 0:
+                        img_url = data['data']['images'][0]
+                        if img_url.startswith('http'):
+                            return download_image_from_url(img_url)
+                    if data['data'].get('cover'):
+                        img_url = data['data']['cover']
+                        if img_url.startswith('http'):
+                            return download_image_from_url(img_url)
+        except:
+            pass
 
-        # ====== الطريقة 2: استخدام SnapTik API ======
+        # استخدام yt-dlp
         try:
-            api_url = f"https://snaptik.app/abc?url={url}"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            response = requests.get(api_url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                # البحث عن الصور في الصفحة
-                soup = BeautifulSoup(response.text, 'html.parser')
-                img_tags = soup.find_all('img')
-                for img in img_tags:
-                    src = img.get('src')
-                    if src and src.startswith('http') and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
-                        if 'logo' not in src.lower() and 'icon' not in src.lower():
-                            logger.info(f"✅ تم العثور على صورة عبر SnapTik")
-                            return download_image_from_url(src)
-        except Exception as e:
-            logger.warning(f"⚠️ فشل SnapTik: {e}")
-
-        # ====== الطريقة 3: استخدام yt-dlp لاستخراج الصورة ======
-        try:
-            logger.info("🔄 محاولة استخدام yt-dlp لاستخراج الصورة...")
             opts = {
                 "quiet": True,
                 "no_warnings": True,
-                "extract_flat": False,
                 "skip_download": True,
+                "extract_flat": False,
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                if info:
-                    # البحث عن الصورة المصغرة
-                    if 'thumbnail' in info:
-                        img_url = info['thumbnail']
-                        if img_url.startswith('http'):
-                            logger.info(f"✅ تم العثور على صورة عبر yt-dlp")
-                            return download_image_from_url(img_url)
-                    if 'thumbnails' in info and info['thumbnails']:
-                        for thumb in info['thumbnails']:
-                            if 'url' in thumb:
-                                img_url = thumb['url']
-                                if img_url.startswith('http'):
-                                    logger.info(f"✅ تم العثور على صورة عبر yt-dlp")
-                                    return download_image_from_url(img_url)
-        except Exception as e:
-            logger.warning(f"⚠️ فشل yt-dlp: {e}")
+                if info and info.get('thumbnail'):
+                    img_url = info['thumbnail']
+                    if img_url.startswith('http'):
+                        return download_image_from_url(img_url)
+        except:
+            pass
 
-        logger.warning("⚠️ لم يتم العثور على صورة في TikTok")
         return None
 
     except Exception as e:
@@ -206,12 +166,12 @@ def extract_tiktok_image(url):
 
 
 # ============================================================
-# Cobalt API
+# Cobalt API (لتحميل الفيديو)
 # ============================================================
 def download_via_cobalt(url):
-    """إرسال الرابط إلى Cobalt API"""
+    """إرسال الرابط إلى Cobalt API لتحميل الفيديو"""
     try:
-        logger.info(f"📤 [1/3] محاولة Cobalt API: {url}")
+        logger.info(f"📤 محاولة Cobalt API: {url}")
         
         payload = {
             "url": url,
@@ -247,12 +207,12 @@ def download_via_cobalt(url):
 
 
 # ============================================================
-# yt-dlp
+# yt-dlp (لتحميل الفيديو من YouTube)
 # ============================================================
 def download_with_ytdlp(url):
-    """تحميل باستخدام yt-dlp"""
+    """تحميل فيديو باستخدام yt-dlp"""
     try:
-        logger.info(f"📤 [2/3] محاولة yt-dlp: {url}")
+        logger.info(f"📤 محاولة yt-dlp: {url}")
         
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
@@ -307,45 +267,7 @@ def download_with_ytdlp(url):
 
 
 # ============================================================
-# pytubefix
-# ============================================================
-def download_with_pytubefix(url):
-    """تحميل YouTube باستخدام pytubefix"""
-    try:
-        from pytubefix import YouTube
-        
-        logger.info(f"📤 [3/3] محاولة pytubefix: {url}")
-        
-        if "/shorts/" in url:
-            video_id = url.split("/shorts/")[1].split("?")[0]
-            url = f"https://youtube.com/watch?v={video_id}"
-            logger.info(f"🔄 تحويل Shorts إلى: {url}")
-        
-        yt = YouTube(url, use_oauth=True, allow_oauth_cache=True)
-        
-        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
-        
-        if not stream:
-            stream = yt.streams.get_highest_resolution()
-        
-        if not stream:
-            return None
-        
-        file_path = stream.download(output_path="downloads")
-        
-        if os.path.exists(file_path):
-            logger.info(f"✅ pytubefix نجح!")
-            return file_path
-        
-        return None
-        
-    except Exception as e:
-        logger.warning(f"⚠️ pytubefix فشل: {e}")
-        return None
-
-
-# ============================================================
-# دالة تحميل الملف
+# تحميل الملف
 # ============================================================
 def download_file(download_url):
     """تحميل الملف من الرابط المباشر"""
@@ -395,32 +317,36 @@ def download_file(download_url):
 # الواجهة الرئيسية
 # ============================================================
 def download_media(url, bot=None, owner_id=None):
-    """الواجهة الرئيسية - تحميل فيديو أو صورة"""
+    """الواجهة الرئيسية - يحمل فيديو أو صورة حسب الرابط"""
     platform = detect_platform(url)
     logger.info(f"🚀 بدء تحميل من: {platform}")
     
     # ====== Instagram ======
     if "instagram.com" in url:
+        # 1️⃣ حاول تحميل فيديو
+        result = download_via_cobalt(url)
+        if result:
+            stats["success_count"] += 1
+            return result
+        
+        # 2️⃣ إذا فشل الفيديو، جرب صورة
+        logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_instagram_image(url)
         if result:
             stats["success_count"] += 1
             return result
-        
-        result = download_via_cobalt(url)
-        if result:
-            stats["success_count"] += 1
-            return result
     
-    # ====== TikTok (صورة) ======
+    # ====== TikTok ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
-        # 1️⃣ حاول تحميل صورة
-        result = extract_tiktok_image(url)
+        # 1️⃣ حاول تحميل فيديو
+        result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ إذا فشل، جرب Cobalt
-        result = download_via_cobalt(url)
+        # 2️⃣ إذا فشل الفيديو، جرب صورة
+        logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
+        result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
             return result
@@ -433,11 +359,6 @@ def download_media(url, bot=None, owner_id=None):
             return result
         
         result = download_with_ytdlp(url)
-        if result:
-            stats["success_count"] += 1
-            return result
-        
-        result = download_with_pytubefix(url)
         if result:
             stats["success_count"] += 1
             return result
@@ -473,4 +394,4 @@ def reset_stats():
 
 
 def close_driver():
-    logger.info("✅ باستخدام Cobalt + yt-dlp + pytubefix")
+    logger.info("✅ باستخدام Cobalt + yt-dlp")
