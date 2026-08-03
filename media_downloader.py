@@ -189,22 +189,28 @@ def extract_tiktok_image(url):
 # تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
 # ============================================================
 def download_youtube_video(url):
-    """تحميل فيديو من YouTube (يدعم Shorts + كوكيز + fallback Cobalt)"""
+    """تحميل فيديو من YouTube (يدعم Shorts + fallback Cobalt فقط)"""
     try:
         logger.info(f"📤 تحميل فيديو من YouTube: {url}")
-        
-        # تحويل روابط Shorts و youtu.be
+
+        # تحويل روابط Shorts و youtu.be إلى صيغة قياسية
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل Shorts إلى: {url}")
-        
+
         if "youtu.be" in url:
             video_id = url.split("/")[-1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
-        
-        # إعدادات yt-dlp
+
+        # 🟢 أولاً جرّب Cobalt مباشرة (أفضل على السيرفرات)
+        result = download_via_cobalt(url)
+        if result:
+            logger.info("✅ تم التحميل من Cobalt بنجاح")
+            return result
+
+        # 🔄 إذا فشل، استخدم yt-dlp كاحتياطي
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
             "format": "bestvideo+bestaudio/best",
@@ -216,30 +222,24 @@ def download_youtube_video(url):
             "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
             "concurrent_fragment_downloads": 5,
         }
-        
+
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 if info:
                     file_path = ydl.prepare_filename(info)
                     if os.path.exists(file_path):
-                        logger.info("✅ تم تحميل الفيديو عبر yt-dlp")
+                        logger.info("✅ تم التحميل عبر yt-dlp كاحتياطي")
                         return file_path
         except Exception as e:
             logger.warning(f"⚠️ yt-dlp فشل: {e}")
-        
-        # 🔄 Fallback إلى Cobalt API إذا yt-dlp فشل
-        logger.info("📤 محاولة Cobalt API كـ fallback...")
-        result = download_via_cobalt(url)
-        if result:
-            logger.info("✅ Cobalt نجح كـ بديل")
-            return result
-        
+
         return None
-        
+
     except Exception as e:
         logger.warning(f"⚠️ فشل تحميل YouTube نهائيًا: {e}")
         return None
+
 
 
 # ============================================================
