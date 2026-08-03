@@ -189,10 +189,11 @@ def extract_tiktok_image(url):
 # تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
 # ============================================================
 def download_youtube_video(url):
-    """تحميل فيديو من YouTube (يدعم Shorts)"""
+    """تحميل فيديو من YouTube (يدعم Shorts + كوكيز)"""
     try:
         logger.info(f"📤 تحميل فيديو من YouTube: {url}")
         
+        # تحويل روابط Shorts و youtu.be إلى صيغة قياسية
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
@@ -203,40 +204,31 @@ def download_youtube_video(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # ✅ تغيير format من best[ext=mp4]/best إلى best
+        # إعدادات yt-dlp محسّنة
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
-            "format": "best",  # ✅ استخدام best بدلاً من best[ext=mp4]/best
+            "format": "bestvideo+bestaudio/best",  # يضمن الفيديو + الصوت
             "quiet": False,
             "noplaylist": True,
             "ignoreerrors": True,
-            "cookiefile": "cookies.txt",
+            "cookiefile": os.path.join(os.path.dirname(__file__), "cookies.txt"),  # مسار ثابت للكوكيز
             "extract_flat": False,
-            "prefer_insecure": True,
             "headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-us,en;q=0.5",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             },
-            "throttledratelimit": 100000000,
             "concurrent_fragment_downloads": 5,
-            "extractor_args": {
-                "youtube": {
-                    "skip": ["hls", "dash"],
-                }
-            }
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             file_path = ydl.prepare_filename(info)
             
+            # تحقق من وجود الملف
             if os.path.exists(file_path):
                 logger.info(f"✅ تم تحميل الفيديو")
                 return file_path
             
+            # fallback إذا الامتداد مختلف
             for ext in ['.mp4', '.webm', '.mkv']:
                 test_path = file_path.rsplit('.', 1)[0] + ext
                 if os.path.exists(test_path):
