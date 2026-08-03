@@ -120,7 +120,6 @@ def extract_tiktok_image(url):
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
         
-        # استخدام TikWM API
         try:
             api_url = f"https://www.tikwm.com/api/"
             params = {"url": url, "count": 1}
@@ -141,7 +140,6 @@ def extract_tiktok_image(url):
         except:
             pass
 
-        # استخدام yt-dlp
         try:
             opts = {
                 "quiet": True,
@@ -162,6 +160,72 @@ def extract_tiktok_image(url):
 
     except Exception as e:
         logger.error(f"❌ فشل استخراج الصورة: {e}")
+        return None
+
+
+# ============================================================
+# تحميل الفيديو من YouTube (يدعم Shorts)
+# ============================================================
+def download_youtube_video(url):
+    """تحميل فيديو من YouTube (يدعم Shorts)"""
+    try:
+        logger.info(f"📤 تحميل فيديو من YouTube: {url}")
+        
+        # ✅ تحويل Shorts إلى رابط عادي
+        if "/shorts/" in url:
+            video_id = url.split("/shorts/")[1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل Shorts إلى: {url}")
+        
+        if "youtu.be" in url:
+            video_id = url.split("/")[-1].split("?")[0]
+            url = f"https://youtube.com/watch?v={video_id}"
+            logger.info(f"🔄 تحويل youtu.be إلى: {url}")
+        
+        # ✅ إعدادات محسنة لـ YouTube Shorts
+        opts = {
+            "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
+            "format": "best[ext=mp4]/best",
+            "quiet": False,
+            "noplaylist": True,
+            "ignoreerrors": True,
+            "cookiefile": None,
+            "extract_flat": False,
+            "prefer_insecure": True,
+            "headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-us,en;q=0.5",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+            },
+            "throttledratelimit": 100000000,
+            "concurrent_fragment_downloads": 5,
+            "extractor_args": {
+                "youtube": {
+                    "skip": ["hls", "dash"],
+                }
+            }
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            
+            if os.path.exists(file_path):
+                logger.info(f"✅ تم تحميل الفيديو")
+                return file_path
+            
+            for ext in ['.mp4', '.webm', '.mkv']:
+                test_path = file_path.rsplit('.', 1)[0] + ext
+                if os.path.exists(test_path):
+                    logger.info(f"✅ تم تحميل الفيديو (امتداد مختلف)")
+                    return test_path
+                    
+        return None
+        
+    except Exception as e:
+        logger.warning(f"⚠️ فشل تحميل YouTube: {e}")
         return None
 
 
@@ -203,66 +267,6 @@ def download_via_cobalt(url):
             
     except Exception as e:
         logger.warning(f"⚠️ Cobalt خطأ: {e}")
-        return None
-
-
-# ============================================================
-# yt-dlp (لتحميل الفيديو من YouTube)
-# ============================================================
-def download_with_ytdlp(url):
-    """تحميل فيديو باستخدام yt-dlp"""
-    try:
-        logger.info(f"📤 محاولة yt-dlp: {url}")
-        
-        if "/shorts/" in url:
-            video_id = url.split("/shorts/")[1].split("?")[0]
-            url = f"https://youtube.com/watch?v={video_id}"
-            logger.info(f"🔄 تحويل Shorts إلى: {url}")
-        
-        if "youtu.be" in url:
-            video_id = url.split("/")[-1].split("?")[0]
-            url = f"https://youtube.com/watch?v={video_id}"
-            logger.info(f"🔄 تحويل youtu.be إلى: {url}")
-        
-        opts = {
-            "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
-            "format": "best[ext=mp4]/best",
-            "quiet": False,
-            "noplaylist": True,
-            "ignoreerrors": True,
-            "cookiefile": None,
-            "extract_flat": False,
-            "prefer_insecure": True,
-            "headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            },
-            "throttledratelimit": 100000000,
-            "concurrent_fragment_downloads": 5,
-            "extractor_args": {
-                "youtube": {
-                    "skip": ["hls", "dash"],
-                }
-            }
-        }
-        
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info)
-            
-            if os.path.exists(file_path):
-                logger.info(f"✅ yt-dlp نجح!")
-                return file_path
-            
-            for ext in ['.mp4', '.webm', '.mkv']:
-                test_path = file_path.rsplit('.', 1)[0] + ext
-                if os.path.exists(test_path):
-                    logger.info(f"✅ yt-dlp نجح (امتداد مختلف)!")
-                    return test_path
-                    
-        return None
-        
-    except Exception as e:
-        logger.warning(f"⚠️ yt-dlp فشل: {e}")
         return None
 
 
@@ -323,13 +327,11 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== Instagram ======
     if "instagram.com" in url:
-        # 1️⃣ حاول تحميل فيديو
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ إذا فشل الفيديو، جرب صورة
         logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_instagram_image(url)
         if result:
@@ -338,27 +340,27 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== TikTok ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
-        # 1️⃣ حاول تحميل فيديو
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ إذا فشل الفيديو، جرب صورة
         logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
             return result
     
-    # ====== YouTube ======
+    # ====== YouTube (يدعم Shorts) ======
     if "youtube.com" in url or "youtu.be" in url:
+        # 1️⃣ Cobalt
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        result = download_with_ytdlp(url)
+        # 2️⃣ yt-dlp (مخصص لـ YouTube)
+        result = download_youtube_video(url)
         if result:
             stats["success_count"] += 1
             return result
