@@ -71,12 +71,12 @@ def download_image_from_url(image_url):
 
 
 # ============================================================
-# Instagram
+# Instagram - استخراج فيديو وصورة مباشرة
 # ============================================================
-def extract_instagram_image(url):
-    """استخراج صورة من Instagram"""
+def extract_instagram_media(url):
+    """استخراج فيديو أو صورة من Instagram مباشرة"""
     try:
-        logger.info("🖼️ استخراج صورة من Instagram...")
+        logger.info("📸 استخراج محتوى من Instagram...")
         
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -90,13 +90,35 @@ def extract_instagram_image(url):
         html = response.text
         soup = BeautifulSoup(html, 'html.parser')
 
+        # البحث عن فيديو
+        og_video = soup.find('meta', property='og:video')
+        if og_video and og_video.get('content'):
+            video_url = og_video['content']
+            if video_url.startswith('http'):
+                return download_file(video_url)
+        
+        scripts = soup.find_all('script')
+        for script in scripts:
+            if script.string:
+                matches = re.findall(r'"video_url":"([^"]+)"', script.string)
+                if matches:
+                    video_url = matches[0].replace('\\/', '/')
+                    if video_url.startswith('http'):
+                        return download_file(video_url)
+                
+                matches = re.findall(r'"video_versions":[^}]*"url":"([^"]+)"', script.string)
+                if matches:
+                    video_url = matches[0].replace('\\/', '/')
+                    if video_url.startswith('http'):
+                        return download_file(video_url)
+
+        # البحث عن صورة
         og_image = soup.find('meta', property='og:image')
         if og_image and og_image.get('content'):
             img_url = og_image['content']
             if img_url.startswith('http'):
                 return download_image_from_url(img_url)
-
-        scripts = soup.find_all('script')
+        
         for script in scripts:
             if script.string:
                 matches = re.findall(r'"display_url":"([^"]+)"', script.string)
@@ -108,7 +130,7 @@ def extract_instagram_image(url):
         return None
 
     except Exception as e:
-        logger.error(f"❌ فشل استخراج الصورة: {e}")
+        logger.error(f"❌ فشل استخراج المحتوى: {e}")
         return None
 
 
@@ -171,7 +193,6 @@ def download_youtube_video(url):
     try:
         logger.info(f"📤 تحميل فيديو من YouTube: {url}")
         
-        # ✅ تحويل Shorts إلى رابط عادي
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
@@ -182,14 +203,14 @@ def download_youtube_video(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # ✅ إعدادات مع الكوكيز
+        # ✅ تغيير format من best[ext=mp4]/best إلى best
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
-            "format": "best[ext=mp4]/best",
+            "format": "best",  # ✅ استخدام best بدلاً من best[ext=mp4]/best
             "quiet": False,
             "noplaylist": True,
             "ignoreerrors": True,
-            "cookiefile": "cookies.txt",  # ✅ إضافة الكوكيز
+            "cookiefile": "cookies.txt",
             "extract_flat": False,
             "prefer_insecure": True,
             "headers": {
@@ -327,13 +348,12 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== Instagram ======
     if "instagram.com" in url:
-        result = download_via_cobalt(url)
+        result = extract_instagram_media(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
-        result = extract_instagram_image(url)
+        result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
@@ -345,13 +365,12 @@ def download_media(url, bot=None, owner_id=None):
             stats["success_count"] += 1
             return result
         
-        logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
             return result
     
-    # ====== YouTube (يدعم Shorts) ======
+    # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
         # 1️⃣ yt-dlp مع الكوكيز (الأولوية)
         result = download_youtube_video(url)
