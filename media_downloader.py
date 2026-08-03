@@ -16,10 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============== جلب رابط Cobalt من ملف .env ==============
 COBALT_API_URL = os.getenv("COBALT_API_URL", "https://cobalt.tools/api/json")
-
-# ============== إحصائيات ==============
 stats = {"success_count": 0, "fail_count": 0}
 
 
@@ -37,7 +34,7 @@ def detect_platform(url: str) -> str:
 
 
 # ============================================================
-# 0️⃣ تحميل الصور
+# تحميل الصور
 # ============================================================
 def download_image_from_url(image_url):
     """تحميل صورة من رابط مباشر"""
@@ -45,7 +42,6 @@ def download_image_from_url(image_url):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-            "Referer": "https://www.tiktok.com/",
         }
 
         response = requests.get(image_url, headers=headers, stream=True, timeout=30)
@@ -94,14 +90,12 @@ def extract_instagram_image(url):
         html = response.text
         soup = BeautifulSoup(html, 'html.parser')
 
-        # البحث عن meta tag
         og_image = soup.find('meta', property='og:image')
         if og_image and og_image.get('content'):
             img_url = og_image['content']
             if img_url.startswith('http'):
                 return download_image_from_url(img_url)
 
-        # البحث في Scripts
         scripts = soup.find_all('script')
         for script in scripts:
             if script.string:
@@ -119,90 +113,89 @@ def extract_instagram_image(url):
 
 
 # ============================================================
-# TikTok (طريقة جديدة)
+# TikTok (طريقة جديدة تعتمد على API)
 # ============================================================
 def extract_tiktok_image(url):
-    """استخراج صورة من TikTok - طريقة جديدة"""
+    """استخراج صورة من TikTok باستخدام API"""
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Referer": "https://www.tiktok.com/",
-        }
-
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            logger.warning(f"⚠️ فشل جلب الصفحة: {response.status_code}")
-            return None
-
-        html = response.text
-
-        # ====== الطريقة 1: البحث في JSON ======
-        # البحث عن __UNIVERSAL_DATA_FOR_REHYDRATION__
-        json_pattern = r'<script[^>]+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>'
-        json_match = re.search(json_pattern, html, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group(1))
-                
-                # محاولة استخراج الصورة من JSON
-                if '__DEFAULT_SCOPE__' in data:
-                    scope = data['__DEFAULT_SCOPE__']
-                    
-                    # البحث عن cover
-                    if 'video' in scope and 'cover' in scope['video']:
-                        img_url = scope['video']['cover']
-                        if img_url.startswith('http'):
-                            logger.info(f"✅ تم العثور على صورة في JSON (cover)")
-                            return download_image_from_url(img_url)
-                    
-                    # البحث عن image
-                    if 'image' in scope:
-                        img_url = scope['image']
-                        if isinstance(img_url, str) and img_url.startswith('http'):
-                            logger.info(f"✅ تم العثور على صورة في JSON (image)")
-                            return download_image_from_url(img_url)
-                    
-                    # البحث في seo
-                    if 'seo' in scope and 'image' in scope['seo']:
-                        img_url = scope['seo']['image']
-                        if img_url.startswith('http'):
-                            logger.info(f"✅ تم العثور على صورة في JSON (seo)")
-                            return download_image_from_url(img_url)
-            except Exception as e:
-                logger.warning(f"⚠️ فشل تحليل JSON: {e}")
-
-        # ====== الطريقة 2: البحث في الـ Scripts ======
-        soup = BeautifulSoup(html, 'html.parser')
-        scripts = soup.find_all('script')
-        
-        for script in scripts:
-            if script.string:
-                # البحث عن imageUrl
-                matches = re.findall(r'"imageUrl":"([^"]+)"', script.string)
-                if matches:
-                    img_url = matches[0].replace('\\/', '/')
+        # ====== الطريقة 1: استخدام TikTok API غير رسمي ======
+        try:
+            # استخدام خدمة خارجية لاستخراج البيانات
+            api_url = f"https://www.tikwm.com/api/"
+            params = {
+                "url": url,
+                "count": 1
+            }
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            response = requests.get(api_url, params=params, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('data') and data['data'].get('images'):
+                    # تحميل الصورة الأولى
+                    img_url = data['data']['images'][0]
                     if img_url.startswith('http'):
-                        logger.info(f"✅ تم العثور على صورة في Script (imageUrl)")
+                        logger.info(f"✅ تم العثور على صورة عبر TikWM")
                         return download_image_from_url(img_url)
-                
-                # البحث عن cover
-                matches = re.findall(r'"cover":"([^"]+)"', script.string)
-                if matches:
-                    img_url = matches[0].replace('\\/', '/')
+                if data.get('data') and data['data'].get('cover'):
+                    img_url = data['data']['cover']
                     if img_url.startswith('http'):
-                        logger.info(f"✅ تم العثور على صورة في Script (cover)")
+                        logger.info(f"✅ تم العثور على صورة عبر TikWM (cover)")
                         return download_image_from_url(img_url)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل TikWM: {e}")
 
-        # ====== الطريقة 3: البحث عن meta tag ======
-        og_image = soup.find('meta', property='og:image')
-        if og_image and og_image.get('content'):
-            img_url = og_image['content']
-            if img_url.startswith('http'):
-                logger.info(f"✅ تم العثور على صورة في meta tag")
-                return download_image_from_url(img_url)
+        # ====== الطريقة 2: استخدام SnapTik API ======
+        try:
+            api_url = f"https://snaptik.app/abc?url={url}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(api_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                # البحث عن الصور في الصفحة
+                soup = BeautifulSoup(response.text, 'html.parser')
+                img_tags = soup.find_all('img')
+                for img in img_tags:
+                    src = img.get('src')
+                    if src and src.startswith('http') and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                        if 'logo' not in src.lower() and 'icon' not in src.lower():
+                            logger.info(f"✅ تم العثور على صورة عبر SnapTik")
+                            return download_image_from_url(src)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل SnapTik: {e}")
+
+        # ====== الطريقة 3: استخدام yt-dlp لاستخراج الصورة ======
+        try:
+            logger.info("🔄 محاولة استخدام yt-dlp لاستخراج الصورة...")
+            opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": False,
+                "skip_download": True,
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    # البحث عن الصورة المصغرة
+                    if 'thumbnail' in info:
+                        img_url = info['thumbnail']
+                        if img_url.startswith('http'):
+                            logger.info(f"✅ تم العثور على صورة عبر yt-dlp")
+                            return download_image_from_url(img_url)
+                    if 'thumbnails' in info and info['thumbnails']:
+                        for thumb in info['thumbnails']:
+                            if 'url' in thumb:
+                                img_url = thumb['url']
+                                if img_url.startswith('http'):
+                                    logger.info(f"✅ تم العثور على صورة عبر yt-dlp")
+                                    return download_image_from_url(img_url)
+        except Exception as e:
+            logger.warning(f"⚠️ فشل yt-dlp: {e}")
 
         logger.warning("⚠️ لم يتم العثور على صورة في TikTok")
         return None
@@ -213,7 +206,7 @@ def extract_tiktok_image(url):
 
 
 # ============================================================
-# 1️⃣ Cobalt API
+# Cobalt API
 # ============================================================
 def download_via_cobalt(url):
     """إرسال الرابط إلى Cobalt API"""
@@ -254,7 +247,7 @@ def download_via_cobalt(url):
 
 
 # ============================================================
-# 2️⃣ yt-dlp
+# yt-dlp
 # ============================================================
 def download_with_ytdlp(url):
     """تحميل باستخدام yt-dlp"""
@@ -314,7 +307,7 @@ def download_with_ytdlp(url):
 
 
 # ============================================================
-# 3️⃣ pytubefix
+# pytubefix
 # ============================================================
 def download_with_pytubefix(url):
     """تحميل YouTube باستخدام pytubefix"""
@@ -352,7 +345,7 @@ def download_with_pytubefix(url):
 
 
 # ============================================================
-# دالة تحميل الملف من الرابط
+# دالة تحميل الملف
 # ============================================================
 def download_file(download_url):
     """تحميل الملف من الرابط المباشر"""
@@ -408,21 +401,19 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== Instagram ======
     if "instagram.com" in url:
-        # 1️⃣ حاول تحميل صورة
         result = extract_instagram_image(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ إذا فشل، جرب Cobalt
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
     
-    # ====== TikTok ======
+    # ====== TikTok (صورة) ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
-        # 1️⃣ حاول تحميل صورة (طريقة جديدة)
+        # 1️⃣ حاول تحميل صورة
         result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
@@ -457,7 +448,6 @@ def download_media(url, bot=None, owner_id=None):
         stats["success_count"] += 1
         return result
     
-    # ====== فشل كل شيء ======
     stats["fail_count"] += 1
     logger.error(f"❌ فشلت جميع طرق التحميل: {url}")
     
