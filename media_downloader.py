@@ -5,6 +5,8 @@ import requests
 import logging
 import yt_dlp
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+import json
 
 load_dotenv()
 
@@ -35,7 +37,7 @@ def detect_platform(url: str) -> str:
 
 
 # ============================================================
-# 0️⃣ تحميل الصور (جديد)
+# 0️⃣ تحميل الصور (طريقة قوية)
 # ============================================================
 def download_image_from_url(image_url):
     """تحميل صورة من رابط مباشر"""
@@ -43,6 +45,7 @@ def download_image_from_url(image_url):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+            "Referer": "https://www.instagram.com/",
         }
 
         response = requests.get(image_url, headers=headers, stream=True, timeout=30)
@@ -72,44 +75,76 @@ def download_image_from_url(image_url):
 
 
 def extract_instagram_image(url):
-    """استخراج صورة من Instagram"""
+    """استخراج صورة من Instagram - طريقة محسنة"""
     try:
         logger.info("🖼️ استخراج صورة من Instagram...")
         
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200:
+            logger.warning(f"⚠️ فشل جلب الصفحة: {response.status_code}")
             return None
 
         html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
 
-        patterns = [
-            r'"display_url":"([^"]+)"',
-            r'"display_src":"([^"]+)"',
-            r'"url":"([^"]+\.(jpg|jpeg|png|gif|webp)[^"]*)"',
-            r'<meta property="og:image" content="([^"]+)"',
-            r'<img[^>]+src="([^"]+\.(jpg|jpeg|png|gif|webp)[^"]*)"',
-        ]
+        # ====== الطريقة 1: البحث عن meta tag ======
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            img_url = og_image['content']
+            if img_url.startswith('http'):
+                logger.info(f"✅ تم العثور على صورة في meta tag")
+                return download_image_from_url(img_url)
 
-        for pattern in patterns:
-            matches = re.findall(pattern, html)
-            if matches:
-                for match in matches:
-                    if isinstance(match, tuple):
-                        img_url = match[0]
-                    else:
-                        img_url = match
-
-                    img_url = img_url.replace('\\/', '/')
-                    img_url = img_url.replace('\\', '')
-
-                    if img_url.startswith('http') and any(ext in img_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+        # ====== الطريقة 2: البحث في الـ Scripts ======
+        scripts = soup.find_all('script')
+        for script in scripts:
+            if script.string:
+                # البحث عن display_url
+                matches = re.findall(r'"display_url":"([^"]+)"', script.string)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة في Script")
+                        return download_image_from_url(img_url)
+                
+                # البحث عن display_src
+                matches = re.findall(r'"display_src":"([^"]+)"', script.string)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة في Script")
                         return download_image_from_url(img_url)
 
+        # ====== الطريقة 3: البحث في JSON ======
+        json_pattern = r'<script[^>]+type="text/javascript"[^>]*>([^<]+)</script>'
+        json_matches = re.findall(json_pattern, html)
+        for script in json_matches:
+            if 'display_url' in script:
+                matches = re.findall(r'"display_url":"([^"]+)"', script)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة في JSON")
+                        return download_image_from_url(img_url)
+
+        # ====== الطريقة 4: البحث عن أي صورة في الصفحة ======
+        img_tags = soup.find_all('img')
+        for img in img_tags:
+            src = img.get('src')
+            if src and src.startswith('http') and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                # استبعاد الشعارات والأيقونات الصغيرة
+                if 'logo' in src.lower() or 'icon' in src.lower() or 'avatar' in src.lower():
+                    continue
+                logger.info(f"✅ تم العثور على صورة في img tag")
+                return download_image_from_url(src)
+
+        logger.warning("⚠️ لم يتم العثور على صورة في Instagram")
         return None
 
     except Exception as e:
@@ -118,7 +153,7 @@ def extract_instagram_image(url):
 
 
 def extract_tiktok_image(url):
-    """استخراج صورة من TikTok"""
+    """استخراج صورة من TikTok - طريقة محسنة"""
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
         
@@ -130,33 +165,62 @@ def extract_tiktok_image(url):
 
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200:
+            logger.warning(f"⚠️ فشل جلب الصفحة: {response.status_code}")
             return None
 
         html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
 
-        patterns = [
-            r'"imageUrl":"([^"]+)"',
-            r'"cover":"([^"]+)"',
-            r'"thumb":"([^"]+)"',
-            r'"url":"([^"]+\.(jpg|jpeg|png|gif|webp)[^"]*)"',
-            r'<meta property="og:image" content="([^"]+)"',
-        ]
+        # ====== الطريقة 1: البحث عن meta tag ======
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            img_url = og_image['content']
+            if img_url.startswith('http'):
+                logger.info(f"✅ تم العثور على صورة في meta tag")
+                return download_image_from_url(img_url)
 
-        for pattern in patterns:
-            matches = re.findall(pattern, html)
-            if matches:
-                for match in matches:
-                    if isinstance(match, tuple):
-                        img_url = match[0]
-                    else:
-                        img_url = match
-
-                    img_url = img_url.replace('\\/', '/')
-                    img_url = img_url.replace('\\', '')
-
-                    if img_url.startswith('http') and any(ext in img_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+        # ====== الطريقة 2: البحث في الـ Scripts ======
+        scripts = soup.find_all('script')
+        for script in scripts:
+            if script.string:
+                # البحث عن imageUrl
+                matches = re.findall(r'"imageUrl":"([^"]+)"', script.string)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة في Script")
+                        return download_image_from_url(img_url)
+                
+                # البحث عن cover
+                matches = re.findall(r'"cover":"([^"]+)"', script.string)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة في Script")
                         return download_image_from_url(img_url)
 
+        # ====== الطريقة 3: البحث في JSON ======
+        json_pattern = r'<script[^>]+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>'
+        json_match = re.search(json_pattern, html, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                if '__DEFAULT_SCOPE__' in data:
+                    scope = data['__DEFAULT_SCOPE__']
+                    if 'video' in scope and 'cover' in scope['video']:
+                        img_url = scope['video']['cover']
+                        if img_url.startswith('http'):
+                            logger.info(f"✅ تم العثور على صورة في JSON")
+                            return download_image_from_url(img_url)
+                    if 'image' in scope:
+                        img_url = scope['image']
+                        if isinstance(img_url, str) and img_url.startswith('http'):
+                            logger.info(f"✅ تم العثور على صورة في JSON")
+                            return download_image_from_url(img_url)
+            except:
+                pass
+
+        logger.warning("⚠️ لم يتم العثور على صورة في TikTok")
         return None
 
     except Exception as e:
@@ -358,35 +422,37 @@ def download_media(url, bot=None, owner_id=None):
     platform = detect_platform(url)
     logger.info(f"🚀 بدء تحميل من: {platform}")
     
-    # ====== الصور (Instagram) ======
+    # ====== Instagram ======
     if "instagram.com" in url:
+        # 1️⃣ حاول تحميل صورة
         logger.info("🖼️ محاولة تحميل صورة من Instagram...")
         result = extract_instagram_image(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # إذا فشل، جرب Cobalt
+        # 2️⃣ إذا فشل، جرب Cobalt
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
     
-    # ====== الصور (TikTok) ======
+    # ====== TikTok ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
+        # 1️⃣ حاول تحميل صورة
         logger.info("🖼️ محاولة تحميل صورة من TikTok...")
         result = extract_tiktok_image(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # إذا فشل، جرب Cobalt
+        # 2️⃣ إذا فشل، جرب Cobalt
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
     
-    # ====== الفيديوهات (YouTube) ======
+    # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
         result = download_via_cobalt(url)
         if result:
