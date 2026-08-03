@@ -189,11 +189,11 @@ def extract_tiktok_image(url):
 # تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
 # ============================================================
 def download_youtube_video(url):
-    """تحميل فيديو من YouTube (يدعم Shorts + كوكيز)"""
+    """تحميل فيديو من YouTube (يدعم Shorts + كوكيز + fallback Cobalt)"""
     try:
         logger.info(f"📤 تحميل فيديو من YouTube: {url}")
         
-        # تحويل روابط Shorts و youtu.be إلى صيغة قياسية
+        # تحويل روابط Shorts و youtu.be
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
@@ -204,41 +204,41 @@ def download_youtube_video(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # إعدادات yt-dlp محسّنة
+        # إعدادات yt-dlp
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
-            "format": "bestvideo+bestaudio/best",  # يضمن الفيديو + الصوت
+            "format": "bestvideo+bestaudio/best",
             "quiet": False,
             "noplaylist": True,
             "ignoreerrors": True,
-            "cookiefile": os.path.join(os.path.dirname(__file__), "cookies.txt"),  # مسار ثابت للكوكيز
+            "cookiefile": os.path.join(os.path.dirname(__file__), "cookies.txt"),
             "extract_flat": False,
-            "headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            },
+            "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
             "concurrent_fragment_downloads": 5,
         }
         
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info)
-            
-            # تحقق من وجود الملف
-            if os.path.exists(file_path):
-                logger.info(f"✅ تم تحميل الفيديو")
-                return file_path
-            
-            # fallback إذا الامتداد مختلف
-            for ext in ['.mp4', '.webm', '.mkv']:
-                test_path = file_path.rsplit('.', 1)[0] + ext
-                if os.path.exists(test_path):
-                    logger.info(f"✅ تم تحميل الفيديو (امتداد مختلف)")
-                    return test_path
-                    
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                if info:
+                    file_path = ydl.prepare_filename(info)
+                    if os.path.exists(file_path):
+                        logger.info("✅ تم تحميل الفيديو عبر yt-dlp")
+                        return file_path
+        except Exception as e:
+            logger.warning(f"⚠️ yt-dlp فشل: {e}")
+        
+        # 🔄 Fallback إلى Cobalt API إذا yt-dlp فشل
+        logger.info("📤 محاولة Cobalt API كـ fallback...")
+        result = download_via_cobalt(url)
+        if result:
+            logger.info("✅ Cobalt نجح كـ بديل")
+            return result
+        
         return None
         
     except Exception as e:
-        logger.warning(f"⚠️ فشل تحميل YouTube: {e}")
+        logger.warning(f"⚠️ فشل تحميل YouTube نهائيًا: {e}")
         return None
 
 
