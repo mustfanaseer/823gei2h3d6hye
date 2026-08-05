@@ -189,7 +189,7 @@ def download_youtube_video_with_cookies(url):
             "quiet": False,
             "noplaylist": True,
             "ignoreerrors": True,
-            "cookiefile": "cookies.txt",  # ✅ استخدام الكوكيز
+            "cookiefile": "cookies.txt",
             "extract_flat": False,
             "prefer_insecure": True,
             "headers": {
