@@ -9,7 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes  # ✅ تم التعديل
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from media_downloader import (
     detect_platform,
     download_media,
@@ -136,6 +136,9 @@ def start_daily_report_scheduler(bot):
                             used_space += os.path.getsize(path)
                             temp_files += 1
 
+                # ✅ جلب إجمالي المستخدمين الفعلي
+                total_users = get_total_users()
+
                 msg = get_dev_message(
                     "daily_report",
                     date=datetime.now().strftime("%Y-%m-%d"),
@@ -143,12 +146,13 @@ def start_daily_report_scheduler(bot):
                     fail_count=stats["fail_count"],
                     used_space=round(used_space / (1024 * 1024), 2),
                     temp_files=temp_files,
+                    total_users=total_users,
                     user_id=OWNER_ID
                 )
 
                 import asyncio
                 asyncio.run(bot.send_message(chat_id=OWNER_ID, text=msg, parse_mode="Markdown"))
-                reset_stats()
+                # ✅ لا نعيد تعيين الإحصائيات (نحذف reset_stats)
 
             except Exception as e:
                 logger.error(f"خطأ في التقرير اليومي: {e}")
@@ -161,17 +165,66 @@ def start_daily_report_scheduler(bot):
 # ============== قاعدة البيانات ==============
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
-c.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
+
+# ✅ إنشاء جدول المستخدمين مع created_at
+c.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+''')
+
+# ✅ إضافة عمود created_at إذا كان غير موجود
+c.execute("PRAGMA table_info(users)")
+columns = [col[1] for col in c.fetchall()]
+if 'created_at' not in columns:
+    c.execute("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP")
+    conn.commit()
+
 c.execute("CREATE TABLE IF NOT EXISTS channels (channel TEXT PRIMARY KEY)")
 conn.commit()
 
 
+# ============== دوال المستخدمين ==============
 def add_user(user_id):
+    """إضافة مستخدم جديد مع وقت التسجيل"""
     try:
-        c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-    except:
-        pass
+        # التحقق إذا كان المستخدم موجوداً
+        c.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+        if not c.fetchone():
+            # مستخدم جديد - نسجل وقت الإضافة
+            c.execute("INSERT INTO users (user_id, created_at) VALUES (?, datetime('now'))", (user_id,))
+            conn.commit()
+            logger.info(f"✅ مستخدم جديد: {user_id}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error adding user: {e}")
+        return False
+
+
+def get_total_users():
+    """الحصول على إجمالي عدد المستخدمين"""
+    c.execute("SELECT COUNT(*) FROM users")
+    return c.fetchone()[0]
+
+
+def get_today_users():
+    """الحصول على عدد المستخدمين الجدد اليوم"""
+    c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) = date('now')")
+    return c.fetchone()[0]
+
+
+def get_week_users():
+    """الحصول على عدد المستخدمين الجدد هذا الأسبوع"""
+    c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) >= date('now', '-7 days')")
+    return c.fetchone()[0]
+
+
+def get_month_users():
+    """الحصول على عدد المستخدمين الجدد هذا الشهر"""
+    c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) >= date('now', '-30 days')")
+    return c.fetchone()[0]
 
 
 def get_all_users():
@@ -243,6 +296,12 @@ async def show_panel(update, context):
     if update.effective_user.id != OWNER_ID:
         return
 
+    # ✅ جلب الإحصائيات الفعلية
+    total_users = get_total_users()
+    today_users = get_today_users()
+    week_users = get_week_users()
+    month_users = get_month_users()
+
     keyboard = ReplyKeyboardMarkup([
         [KeyboardButton("📊 عدد المستخدمين"), KeyboardButton("📢 إذاعة")],
         [KeyboardButton("🔒 إدارة الاشتراك الإجباري")],
@@ -251,10 +310,14 @@ async def show_panel(update, context):
 
     await update.message.reply_text(
         f"⚙️ **لوحة تحكم المطور**\n\n"
+        f"📊 **إحصائيات المستخدمين:**\n"
+        f"• إجمالي المستخدمين: **{total_users}**\n"
+        f"• اليوم: **{today_users}** مستخدم جديد\n"
+        f"• هذا الأسبوع: **{week_users}** مستخدم جديد\n"
+        f"• هذا الشهر: **{month_users}** مستخدم جديد\n\n"
         f"🔧 الإصدار: 9.0 (Cobalt API)\n"
-        f"⚡ طريقة التحميل: Cobalt API\n"
-        f"🗑️ التنظيف التلقائي: كل ساعة\n"
-        f"📊 التقرير اليومي: منتصف الليل",
+        f"⚡ طريقة التحميل: Cobalt + yt-dlp\n"
+        f"🗑️ التنظيف التلقائي: كل ساعة",
         reply_markup=keyboard
     )
 
@@ -262,7 +325,7 @@ async def show_panel(update, context):
 # ============== أوامر البوت ==============
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    add_user(user_id)
+    add_user(user_id)  # ✅ تسجيل المستخدم مع الوقت
 
     channels = get_all_channels()
     if channels:
@@ -306,7 +369,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============== تحميل المحتوى ==============
 async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    add_user(user_id)
+    add_user(user_id)  # ✅ تسجيل المستخدم مع الوقت
 
     channels = get_all_channels()
     if channels:
@@ -381,9 +444,17 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ====== أوامر المطور ======
         if user_id == OWNER_ID:
             if text == "📊 عدد المستخدمين":
-                c.execute("SELECT COUNT(*) FROM users")
-                total = c.fetchone()[0]
-                await update.message.reply_text(f"📊 **عدد المستخدمين:** {total}")
+                total = get_total_users()
+                today = get_today_users()
+                week = get_week_users()
+                month = get_month_users()
+                await update.message.reply_text(
+                    f"📊 **إحصائيات المستخدمين:**\n\n"
+                    f"👥 **الإجمالي:** {total}\n"
+                    f"📅 **اليوم:** {today}\n"
+                    f"📆 **هذا الأسبوع:** {week}\n"
+                    f"📆 **هذا الشهر:** {month}"
+                )
                 return
 
             elif text == "📢 إذاعة":
@@ -532,7 +603,6 @@ def main():
     clean_old_files()
     start_cleanup_scheduler()
 
-    # ✅ تم التعديل هنا
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     start_daily_report_scheduler(application.bot)
 
