@@ -1,7 +1,6 @@
 import os
 import time
 import re
-import subprocess
 import requests
 import logging
 import yt_dlp
@@ -35,59 +34,10 @@ def detect_platform(url: str) -> str:
 
 
 # ============================================================
-# ضغط الفيديو
-# ============================================================
-def compress_video(input_path):
-    """ضغط الفيديو إلى حجم أقل من 2 جيجابايت"""
-    try:
-        # التحقق من وجود ffmpeg
-        try:
-            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-        except:
-            logger.warning("⚠️ ffmpeg غير مثبت، تخطي الضغط")
-            return input_path
-        
-        output_path = input_path.replace('.mp4', '_compressed.mp4')
-        
-        # ضغط الفيديو إلى جودة 720p
-        cmd = [
-            'ffmpeg',
-            '-i', input_path,
-            '-vf', 'scale=1280:720',
-            '-c:v', 'libx264',
-            '-crf', '28',
-            '-preset', 'fast',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-movflags', '+faststart',
-            '-y',
-            output_path
-        ]
-        
-        logger.info(f"🔄 جاري ضغط الفيديو...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            original_size = os.path.getsize(input_path) / (1024 * 1024 * 1024)
-            compressed_size = os.path.getsize(output_path) / (1024 * 1024 * 1024)
-            logger.info(f"✅ تم الضغط: {original_size:.2f} GB → {compressed_size:.2f} GB")
-            return output_path
-        
-        return None
-        
-    except subprocess.TimeoutExpired:
-        logger.warning("⚠️ انتهى وقت الضغط")
-        return input_path
-    except Exception as e:
-        logger.warning(f"⚠️ فشل ضغط الفيديو: {e}")
-        return input_path
-
-
-# ============================================================
-# تحميل الصور
+# تحميل الصور بجودة عالية
 # ============================================================
 def download_image_from_url(image_url):
-    """تحميل صورة من رابط مباشر"""
+    """تحميل صورة من رابط مباشر بجودة عالية"""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -98,6 +48,7 @@ def download_image_from_url(image_url):
         if response.status_code != 200:
             return None
 
+        # تحديد الامتداد من الرابط
         ext = image_url.split('.')[-1].split('?')[0]
         if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
             ext = 'jpg'
@@ -110,7 +61,7 @@ def download_image_from_url(image_url):
                     f.write(chunk)
 
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            logger.info(f"✅ تم تحميل الصورة")
+            logger.info(f"✅ تم تحميل الصورة (الحجم: {os.path.getsize(file_path) / 1024:.1f} KB)")
             return file_path
 
         return None
@@ -121,10 +72,10 @@ def download_image_from_url(image_url):
 
 
 # ============================================================
-# Instagram
+# Instagram - استخراج الصورة الأصلية
 # ============================================================
 def extract_instagram_image(url):
-    """استخراج صورة من Instagram"""
+    """استخراج الصورة الأصلية من Instagram بأعلى جودة"""
     try:
         logger.info("🖼️ استخراج صورة من Instagram...")
         
@@ -140,36 +91,106 @@ def extract_instagram_image(url):
         html = response.text
         soup = BeautifulSoup(html, 'html.parser')
 
+        # ====== الطريقة 1: البحث عن og:image (غالباً ما تكون عالية الجودة) ======
         og_image = soup.find('meta', property='og:image')
         if og_image and og_image.get('content'):
             img_url = og_image['content']
+            # تحويل الرابط إلى صيغة عالية الجودة
+            img_url = img_url.replace('?', '?')
+            # إزالة معاملات التقليل
+            if '?' in img_url:
+                img_url = img_url.split('?')[0]
             if img_url.startswith('http'):
                 return download_image_from_url(img_url)
 
+        # ====== الطريقة 2: البحث في الـ Scripts عن الصورة الأصلية ======
         scripts = soup.find_all('script')
         for script in scripts:
             if script.string:
+                # البحث عن display_url (الصورة الأصلية)
                 matches = re.findall(r'"display_url":"([^"]+)"', script.string)
                 if matches:
                     img_url = matches[0].replace('\\/', '/')
                     if img_url.startswith('http'):
+                        # إزالة معاملات التقليل
+                        if '?' in img_url:
+                            img_url = img_url.split('?')[0]
+                        return download_image_from_url(img_url)
+                
+                # البحث عن display_src
+                matches = re.findall(r'"display_src":"([^"]+)"', script.string)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        if '?' in img_url:
+                            img_url = img_url.split('?')[0]
+                        return download_image_from_url(img_url)
+                
+                # البحث عن src في صور متعددة
+                matches = re.findall(r'"src":"([^"]+\.(jpg|jpeg|png|gif|webp)[^"]*)"', script.string)
+                if matches:
+                    for match in matches:
+                        if isinstance(match, tuple):
+                            img_url = match[0]
+                        else:
+                            img_url = match
+                        img_url = img_url.replace('\\/', '/')
+                        if img_url.startswith('http'):
+                            if '?' in img_url:
+                                img_url = img_url.split('?')[0]
+                            return download_image_from_url(img_url)
+
+        # ====== الطريقة 3: البحث في الـ JSON ======
+        json_pattern = r'<script[^>]+type="text/javascript"[^>]*>([^<]+)</script>'
+        json_matches = re.findall(json_pattern, html)
+        for script in json_matches:
+            if 'display_url' in script:
+                matches = re.findall(r'"display_url":"([^"]+)"', script)
+                if matches:
+                    img_url = matches[0].replace('\\/', '/')
+                    if img_url.startswith('http'):
+                        if '?' in img_url:
+                            img_url = img_url.split('?')[0]
                         return download_image_from_url(img_url)
 
+        # ====== الطريقة 4: البحث في الـ img tags ======
+        img_tags = soup.find_all('img')
+        for img in img_tags:
+            src = img.get('src')
+            if src and src.startswith('http'):
+                # استبعاد الشعارات والأيقونات الصغيرة
+                if 'logo' in src.lower() or 'icon' in src.lower() or 'avatar' in src.lower():
+                    continue
+                # استبعاد الصور الصغيرة جداً (أقل من 200 بكسل)
+                width = img.get('width')
+                height = img.get('height')
+                if width and height:
+                    try:
+                        if int(width) < 200 or int(height) < 200:
+                            continue
+                    except:
+                        pass
+                if '?' in src:
+                    src = src.split('?')[0]
+                return download_image_from_url(src)
+
+        logger.warning("⚠️ لم يتم العثور على صورة في Instagram")
         return None
 
     except Exception as e:
-        logger.warning(f"⚠️ فشل استخراج صورة من Instagram: {e}")
+        logger.error(f"❌ فشل استخراج الصورة: {e}")
         return None
 
 
 # ============================================================
-# TikTok
+# TikTok - استخراج الصورة الأصلية
 # ============================================================
 def extract_tiktok_image(url):
-    """استخراج صورة من TikTok"""
+    """استخراج الصورة الأصلية من TikTok بأعلى جودة"""
     try:
         logger.info("🖼️ استخراج صورة من TikTok...")
         
+        # ====== الطريقة 1: استخدام TikWM API ======
         try:
             api_url = f"https://www.tikwm.com/api/"
             params = {"url": url, "count": 1}
@@ -179,17 +200,22 @@ def extract_tiktok_image(url):
             if response.status_code == 200:
                 data = response.json()
                 if data.get('data'):
+                    # الصور المتعددة (Slideshow)
                     if data['data'].get('images') and len(data['data']['images']) > 0:
-                        img_url = data['data']['images'][0]
-                        if img_url.startswith('http'):
-                            return download_image_from_url(img_url)
+                        for img_url in data['data']['images']:
+                            if img_url.startswith('http'):
+                                logger.info(f"✅ تم العثور على صورة (Slideshow)")
+                                return download_image_from_url(img_url)
+                    # صورة الغلاف (أعلى جودة)
                     if data['data'].get('cover'):
                         img_url = data['data']['cover']
                         if img_url.startswith('http'):
+                            logger.info(f"✅ تم العثور على صورة الغلاف")
                             return download_image_from_url(img_url)
         except:
             pass
 
+        # ====== الطريقة 2: استخدام yt-dlp ======
         try:
             opts = {
                 "quiet": True,
@@ -199,17 +225,71 @@ def extract_tiktok_image(url):
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                if info and info.get('thumbnail'):
-                    img_url = info['thumbnail']
-                    if img_url.startswith('http'):
-                        return download_image_from_url(img_url)
+                if info:
+                    # البحث عن thumbnail (أعلى جودة)
+                    if info.get('thumbnail'):
+                        img_url = info['thumbnail']
+                        if img_url.startswith('http'):
+                            logger.info(f"✅ تم العثور على صورة عبر yt-dlp")
+                            return download_image_from_url(img_url)
+                    # البحث عن thumbnails
+                    if info.get('thumbnails'):
+                        # ترتيب الصور من الأعلى جودة للأقل
+                        sorted_thumbs = sorted(info['thumbnails'], key=lambda x: x.get('width', 0) * x.get('height', 0), reverse=True)
+                        for thumb in sorted_thumbs:
+                            if thumb.get('url') and thumb['url'].startswith('http'):
+                                logger.info(f"✅ تم العثور على صورة عبر yt-dlp (thumbnails)")
+                                return download_image_from_url(thumb['url'])
         except:
             pass
 
+        # ====== الطريقة 3: البحث في الصفحة ======
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Referer": "https://www.tiktok.com/",
+            }
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                html = response.text
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # البحث عن og:image
+                og_image = soup.find('meta', property='og:image')
+                if og_image and og_image.get('content'):
+                    img_url = og_image['content']
+                    if img_url.startswith('http'):
+                        logger.info(f"✅ تم العثور على صورة عبر meta tag")
+                        return download_image_from_url(img_url)
+                
+                # البحث في scripts
+                scripts = soup.find_all('script')
+                for script in scripts:
+                    if script.string:
+                        # البحث عن imageUrl
+                        matches = re.findall(r'"imageUrl":"([^"]+)"', script.string)
+                        if matches:
+                            img_url = matches[0].replace('\\/', '/')
+                            if img_url.startswith('http'):
+                                logger.info(f"✅ تم العثور على صورة عبر Script")
+                                return download_image_from_url(img_url)
+                        
+                        # البحث عن cover
+                        matches = re.findall(r'"cover":"([^"]+)"', script.string)
+                        if matches:
+                            img_url = matches[0].replace('\\/', '/')
+                            if img_url.startswith('http'):
+                                logger.info(f"✅ تم العثور على صورة عبر Script (cover)")
+                                return download_image_from_url(img_url)
+        except:
+            pass
+
+        logger.warning("⚠️ لم يتم العثور على صورة في TikTok")
         return None
 
     except Exception as e:
-        logger.warning(f"⚠️ فشل استخراج صورة من TikTok: {e}")
+        logger.error(f"❌ فشل استخراج الصورة: {e}")
         return None
 
 
@@ -319,10 +399,10 @@ def download_via_cobalt(url):
 
 
 # ============================================================
-# تحميل الملف مع ضغط تلقائي
+# تحميل الملف
 # ============================================================
 def download_file(download_url):
-    """تحميل الملف من الرابط المباشر مع ضغط تلقائي إذا كان كبيراً"""
+    """تحميل الملف من الرابط المباشر"""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -357,21 +437,7 @@ def download_file(download_url):
                     f.write(chunk)
         
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            file_size_gb = os.path.getsize(file_path) / (1024 * 1024 * 1024)
-            
-            # إذا كان الملف أكبر من 1.8 جيجابايت، ضغطه
-            if file_size_gb > 1.8:
-                logger.info(f"🔄 الملف كبير ({file_size_gb:.2f} GB)، جاري الضغط...")
-                compressed_path = compress_video(file_path)
-                if compressed_path and compressed_path != file_path:
-                    os.remove(file_path)
-                    return compressed_path
-                else:
-                    logger.warning("⚠️ فشل الضغط، إرسال الملف الأصلي")
-                    return file_path
-            
             return file_path
-            
         return None
             
     except Exception as e:
@@ -389,11 +455,13 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== Instagram ======
     if "instagram.com" in url:
+        # 1️⃣ جرب تحميل فيديو
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
+        # 2️⃣ إذا فشل، استخرج صورة عالية الجودة
         logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_instagram_image(url)
         if result:
@@ -402,11 +470,13 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== TikTok ======
     if "tiktok.com" in url or "vt.tiktok.com" in url:
+        # 1️⃣ جرب تحميل فيديو
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
+        # 2️⃣ إذا فشل، استخرج صورة عالية الجودة
         logger.info("🔄 لم يتم العثور على فيديو، جاري تحميل الصورة...")
         result = extract_tiktok_image(url)
         if result:
@@ -415,13 +485,14 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
-        result = download_via_cobalt(url)
+        # 1️⃣ yt-dlp مع الكوكيز (الأولوية لـ YouTube)
+        result = download_youtube_video_with_cookies(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        logger.info("🔄 Cobalt فشل، جاري استخدام yt-dlp مع الكوكيز...")
-        result = download_youtube_video_with_cookies(url)
+        # 2️⃣ Cobalt (احتياطي)
+        result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
@@ -432,6 +503,7 @@ def download_media(url, bot=None, owner_id=None):
         stats["success_count"] += 1
         return result
     
+    # ====== فشل كل شيء ======
     stats["fail_count"] += 1
     logger.warning(f"⚠️ فشل تحميل المحتوى: {url}")
     
