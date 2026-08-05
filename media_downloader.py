@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import subprocess
 import requests
 import logging
 import yt_dlp
@@ -31,6 +32,55 @@ def detect_platform(url: str) -> str:
         return "Facebook 📘"
     else:
         return "رابط خارجي 🌐"
+
+
+# ============================================================
+# ضغط الفيديو
+# ============================================================
+def compress_video(input_path):
+    """ضغط الفيديو إلى حجم أقل من 2 جيجابايت"""
+    try:
+        # التحقق من وجود ffmpeg
+        try:
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+        except:
+            logger.warning("⚠️ ffmpeg غير مثبت، تخطي الضغط")
+            return input_path
+        
+        output_path = input_path.replace('.mp4', '_compressed.mp4')
+        
+        # ضغط الفيديو إلى جودة 720p
+        cmd = [
+            'ffmpeg',
+            '-i', input_path,
+            '-vf', 'scale=1280:720',
+            '-c:v', 'libx264',
+            '-crf', '28',
+            '-preset', 'fast',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-movflags', '+faststart',
+            '-y',
+            output_path
+        ]
+        
+        logger.info(f"🔄 جاري ضغط الفيديو...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            original_size = os.path.getsize(input_path) / (1024 * 1024 * 1024)
+            compressed_size = os.path.getsize(output_path) / (1024 * 1024 * 1024)
+            logger.info(f"✅ تم الضغط: {original_size:.2f} GB → {compressed_size:.2f} GB")
+            return output_path
+        
+        return None
+        
+    except subprocess.TimeoutExpired:
+        logger.warning("⚠️ انتهى وقت الضغط")
+        return input_path
+    except Exception as e:
+        logger.warning(f"⚠️ فشل ضغط الفيديو: {e}")
+        return input_path
 
 
 # ============================================================
@@ -171,7 +221,6 @@ def download_youtube_video_with_cookies(url):
     try:
         logger.info(f"📤 تحميل فيديو من YouTube باستخدام الكوكيز: {url}")
         
-        # تحويل Shorts إلى رابط عادي
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
@@ -182,7 +231,6 @@ def download_youtube_video_with_cookies(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # ✅ إعدادات مع الكوكيز
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
             "format": "best[ext=mp4]/best",
@@ -271,10 +319,10 @@ def download_via_cobalt(url):
 
 
 # ============================================================
-# تحميل الملف
+# تحميل الملف مع ضغط تلقائي
 # ============================================================
 def download_file(download_url):
-    """تحميل الملف من الرابط المباشر"""
+    """تحميل الملف من الرابط المباشر مع ضغط تلقائي إذا كان كبيراً"""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -309,7 +357,21 @@ def download_file(download_url):
                     f.write(chunk)
         
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            file_size_gb = os.path.getsize(file_path) / (1024 * 1024 * 1024)
+            
+            # إذا كان الملف أكبر من 1.8 جيجابايت، ضغطه
+            if file_size_gb > 1.8:
+                logger.info(f"🔄 الملف كبير ({file_size_gb:.2f} GB)، جاري الضغط...")
+                compressed_path = compress_video(file_path)
+                if compressed_path and compressed_path != file_path:
+                    os.remove(file_path)
+                    return compressed_path
+                else:
+                    logger.warning("⚠️ فشل الضغط، إرسال الملف الأصلي")
+                    return file_path
+            
             return file_path
+            
         return None
             
     except Exception as e:
@@ -353,13 +415,11 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
-        # 1️⃣ Cobalt (أولاً)
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ yt-dlp مع الكوكيز (ثانياً - بعد فشل Cobalt)
         logger.info("🔄 Cobalt فشل، جاري استخدام yt-dlp مع الكوكيز...")
         result = download_youtube_video_with_cookies(url)
         if result:
@@ -372,7 +432,6 @@ def download_media(url, bot=None, owner_id=None):
         stats["success_count"] += 1
         return result
     
-    # ====== فشل كل شيء ======
     stats["fail_count"] += 1
     logger.warning(f"⚠️ فشل تحميل المحتوى: {url}")
     
