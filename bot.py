@@ -400,10 +400,11 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_inline_buttons()
                 )
             else:
-                # ✅ إرسال الفيديو كـ Document (يدعم حتى 2 جيجابايت)
-                await update.message.reply_document(
-                    document=f,
-                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
+                # ✅ إرسال الفيديو كـ Video (مشغل مدمج في تليجرام)
+                await update.message.reply_video(
+                    video=f,
+                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB",
+                    supports_streaming=True,
                     reply_markup=get_inline_buttons()
                 )
 
