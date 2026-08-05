@@ -280,36 +280,6 @@ def get_channel_buttons(channels):
     return InlineKeyboardMarkup(keyboard)
 
 
-# ✅ أزرار جديدة: تحميل الملف المضغوط + قناة المصنع
-def get_video_buttons(file_id):
-    """إنشاء أزرار لتحميل الملف المضغوط"""
-    keyboard = [
-        [InlineKeyboardButton("📥 تحميل الملف", callback_data=f"download_{file_id}")],  # زر تحميل الملف المضغوط
-        [
-            InlineKeyboardButton("👨‍💼 مطور البوت", url=f"https://t.me/{os.getenv('OWNER_USERNAME', 'sorx_baghdad')}"),
-            InlineKeyboardButton("🏭 قناة المصنع", url=f"https://t.me/{os.getenv('CHANNEL_USERNAME', 'sorx_baghdad').replace('@', '')}")
-        ]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-# ============== معالج ضغط الأزرار ==============
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data.startswith("download_"):
-        file_id = query.data.replace("download_", "")
-        try:
-            # إعادة إرسال الملف للمستخدم
-            await query.message.reply_document(
-                document=file_id,
-                caption="📥 **تم تحميل الفيديو بنجاح!**"
-            )
-        except Exception as e:
-            await query.message.reply_text(f"❌ حدث خطأ: {e}")
-
-
 # ============== لوحة المطور ==============
 async def show_panel(update, context):
     if update.effective_user.id != OWNER_ID:
@@ -412,7 +382,6 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text(get_loading())
 
     file_path = None
-    file_id = None
 
     try:
         file_path = download_media(url, bot=context.bot, owner_id=OWNER_ID)
@@ -431,14 +400,12 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_inline_buttons()
                 )
             else:
-                # ✅ إرسال الفيديو مع زر تحميل الملف المضغوط
-                message = await update.message.reply_document(
+                # ✅ إرسال الفيديو كـ Document (يدعم حتى 2 جيجابايت)
+                await update.message.reply_document(
                     document=f,
-                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB",
-                    reply_markup=get_video_buttons(file_path)  # ✅ زر تحميل الملف
+                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
+                    reply_markup=get_inline_buttons()
                 )
-                # تخزين file_id للاستخدام لاحقاً
-                file_id = message.document.file_id
 
         await status_msg.delete()
 
@@ -626,10 +593,6 @@ def main():
     start_cleanup_scheduler()
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    # إضافة معالج الأزرار
-    application.add_handler(CallbackQueryHandler(button_callback))
-    
     start_daily_report_scheduler(application.bot)
 
     application.add_handler(CommandHandler("start", start_command))
