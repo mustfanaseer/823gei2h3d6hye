@@ -66,8 +66,7 @@ def download_image_from_url(image_url):
         return None
 
     except Exception as e:
-        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. : {e}")
+        logger.warning(f"⚠️ فشل تحميل الصورة: {e}")
         return None
 
 
@@ -109,8 +108,7 @@ def extract_instagram_image(url):
         return None
 
     except Exception as e:
-        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى.: {e}")
+        logger.warning(f"⚠️ فشل استخراج صورة من Instagram: {e}")
         return None
 
 
@@ -161,8 +159,7 @@ def extract_tiktok_image(url):
         return None
 
     except Exception as e:
-        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
+        logger.warning(f"⚠️ فشل استخراج صورة من TikTok: {e}")
         return None
 
 
@@ -174,7 +171,7 @@ def download_youtube_video(url):
     try:
         logger.info(f"📤 تحميل فيديو من YouTube: {url}")
         
-        # ✅ تحويل Shorts إلى رابط عادي
+        # تحويل Shorts إلى رابط عادي
         if "/shorts/" in url:
             video_id = url.split("/shorts/")[1].split("?")[0]
             url = f"https://youtube.com/watch?v={video_id}"
@@ -185,7 +182,7 @@ def download_youtube_video(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # ✅ إعدادات محسنة لـ YouTube Shorts
+        # إعدادات محسنة لـ YouTube Shorts
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
             "format": "best[ext=mp4]/best",
@@ -228,8 +225,7 @@ def download_youtube_video(url):
         return None
         
     except Exception as e:
-        logger.warning(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
+        logger.warning(f"⚠️ فشل تحميل فيديو YouTube: {e}")
         return None
 
 
@@ -317,8 +313,7 @@ def download_file(download_url):
         return None
             
     except Exception as e:
-        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
+        logger.warning(f"⚠️ فشل تحميل الملف: {e}")
         return None
 
 
@@ -356,7 +351,7 @@ def download_media(url, bot=None, owner_id=None):
             stats["success_count"] += 1
             return result
     
-    # ====== YouTube (يدعم Shorts) ======
+    # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
         # 1️⃣ Cobalt
         result = download_via_cobalt(url)
@@ -376,9 +371,9 @@ def download_media(url, bot=None, owner_id=None):
         stats["success_count"] += 1
         return result
     
+    # ====== فشل كل شيء ======
     stats["fail_count"] += 1
-    logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
-💡 يرجى التحقق من الرابط والمحاولة مرة أخرى.: {url}")
+    logger.warning(f"⚠️ فشل تحميل المحتوى: {url}")
     
     if bot and owner_id:
         try:
