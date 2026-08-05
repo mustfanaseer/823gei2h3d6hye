@@ -164,12 +164,12 @@ def extract_tiktok_image(url):
 
 
 # ============================================================
-# تحميل الفيديو من YouTube (يدعم Shorts)
+# تحميل الفيديو من YouTube (يدعم Shorts + كوكيز)
 # ============================================================
-def download_youtube_video(url):
-    """تحميل فيديو من YouTube (يدعم Shorts)"""
+def download_youtube_video_with_cookies(url):
+    """تحميل فيديو من YouTube باستخدام الكوكيز"""
     try:
-        logger.info(f"📤 تحميل فيديو من YouTube: {url}")
+        logger.info(f"📤 تحميل فيديو من YouTube باستخدام الكوكيز: {url}")
         
         # تحويل Shorts إلى رابط عادي
         if "/shorts/" in url:
@@ -182,14 +182,14 @@ def download_youtube_video(url):
             url = f"https://youtube.com/watch?v={video_id}"
             logger.info(f"🔄 تحويل youtu.be إلى: {url}")
         
-        # إعدادات محسنة لـ YouTube Shorts
+        # ✅ إعدادات مع الكوكيز
         opts = {
             "outtmpl": "downloads/ytdlp_%(id)s.%(ext)s",
             "format": "best[ext=mp4]/best",
             "quiet": False,
             "noplaylist": True,
             "ignoreerrors": True,
-            "cookiefile": None,
+            "cookiefile": "cookies.txt",  # ✅ استخدام الكوكيز
             "extract_flat": False,
             "prefer_insecure": True,
             "headers": {
@@ -213,7 +213,7 @@ def download_youtube_video(url):
             file_path = ydl.prepare_filename(info)
             
             if os.path.exists(file_path):
-                logger.info(f"✅ تم تحميل الفيديو")
+                logger.info(f"✅ تم تحميل الفيديو باستخدام الكوكيز")
                 return file_path
             
             for ext in ['.mp4', '.webm', '.mkv']:
@@ -225,7 +225,7 @@ def download_youtube_video(url):
         return None
         
     except Exception as e:
-        logger.warning(f"⚠️ فشل تحميل فيديو YouTube: {e}")
+        logger.warning(f"⚠️ فشل تحميل فيديو YouTube بالكوكيز: {e}")
         return None
 
 
@@ -353,14 +353,15 @@ def download_media(url, bot=None, owner_id=None):
     
     # ====== YouTube ======
     if "youtube.com" in url or "youtu.be" in url:
-        # 1️⃣ Cobalt
+        # 1️⃣ Cobalt (أولاً)
         result = download_via_cobalt(url)
         if result:
             stats["success_count"] += 1
             return result
         
-        # 2️⃣ yt-dlp (مخصص لـ YouTube)
-        result = download_youtube_video(url)
+        # 2️⃣ yt-dlp مع الكوكيز (ثانياً - بعد فشل Cobalt)
+        logger.info("🔄 Cobalt فشل، جاري استخدام yt-dlp مع الكوكيز...")
+        result = download_youtube_video_with_cookies(url)
         if result:
             stats["success_count"] += 1
             return result
@@ -397,4 +398,4 @@ def reset_stats():
 
 
 def close_driver():
-    logger.info("✅ باستخدام Cobalt + yt-dlp")
+    logger.info("✅ باستخدام Cobalt + yt-dlp مع الكوكيز")
