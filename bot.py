@@ -280,6 +280,19 @@ def get_channel_buttons(channels):
     return InlineKeyboardMarkup(keyboard)
 
 
+# ✅ أزرار الفيديو الجديدة (زر تحميل عريض + زرين تحته)
+def get_video_buttons(video_url):
+    """إنشاء أزرار للفيديو: زر تحميل عريض في الأعلى وزرين تحته"""
+    keyboard = [
+        [InlineKeyboardButton("📥 تحميل الفيديو", url=video_url)],  # زر عريض في الأعلى
+        [
+            InlineKeyboardButton("▶️ تشغيل الفيديو", url=video_url),
+            InlineKeyboardButton("👨‍💼 مطور البوت", url=f"https://t.me/{os.getenv('OWNER_USERNAME', 'sorx_baghdad')}")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 # ============== لوحة المطور ==============
 async def show_panel(update, context):
     if update.effective_user.id != OWNER_ID:
@@ -400,11 +413,11 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_inline_buttons()
                 )
             else:
-                # ✅ إرسال الفيديو كـ Document (يدعم حتى 2 جيجابايت)
+                # ✅ إرسال الفيديو مع الأزرار الجديدة
                 await update.message.reply_document(
                     document=f,
-                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
-                    reply_markup=get_inline_buttons()
+                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB",
+                    reply_markup=get_video_buttons(url)  # ✅ أزرار جديدة
                 )
 
         await status_msg.delete()
