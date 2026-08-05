@@ -354,7 +354,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ============== تحميل المحتوى (مع إصلاح Timeout) ==============
+# ============== تحميل المحتوى ==============
 async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     add_user(user_id)
@@ -397,16 +397,14 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_photo(
                     photo=f,
                     caption=f"{get_success()}\n📌 {platform}\n🖼️ **صورة**\n💾 {file_size:.2f} MB",
-                    reply_markup=get_inline_buttons(),
-                    timeout=120  # ✅ زيادة مهلة الإرسال
+                    reply_markup=get_inline_buttons()
                 )
             else:
-                # ✅ إرسال الفيديو مع مهلة أطول
+                # ✅ إرسال الفيديو كـ Document (يدعم حتى 2 جيجابايت)
                 await update.message.reply_document(
                     document=f,
                     caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
-                    reply_markup=get_inline_buttons(),
-                    timeout=180  # ✅ 3 دقائق للملفات الكبيرة
+                    reply_markup=get_inline_buttons()
                 )
 
         await status_msg.delete()
@@ -416,39 +414,7 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"🗑️ تم حذف الملف: {os.path.basename(file_path)}")
 
     except Exception as e:
-        logger.error(f"خطأ في الإرسال: {e}")
-        
-        # ✅ التحقق من نوع الخطأ
-        error_str = str(e).lower()
-        if "timeout" in error_str or "timed out" in error_str:
-            # ✅ محاولة إعادة الإرسال مرة أخرى
-            try:
-                logger.info("🔄 محاولة إعادة الإرسال بعد Timeout...")
-                if file_path and os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        if file_path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
-                            await update.message.reply_photo(
-                                photo=f,
-                                caption=f"{get_success()}\n📌 {platform}\n🖼️ **صورة**\n💾 {file_size:.2f} MB",
-                                reply_markup=get_inline_buttons(),
-                                timeout=180
-                            )
-                        else:
-                            await update.message.reply_document(
-                                document=f,
-                                caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
-                                reply_markup=get_inline_buttons(),
-                                timeout=180
-                            )
-                    await status_msg.delete()
-                    logger.info("✅ تم الإرسال بنجاح بعد المحاولة الثانية")
-                    if file_path and os.path.exists(file_path):
-                        os.remove(file_path)
-                    return
-            except Exception as e2:
-                logger.error(f"❌ فشلت المحاولة الثانية: {e2}")
-        
-        # ✅ إذا فشل كل شيء، أرسل رسالة الخطأ
+        logger.error(f"خطأ: {e}")
         await status_msg.edit_text(get_error(), reply_markup=get_inline_buttons())
         if file_path and os.path.exists(file_path):
             try:
