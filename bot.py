@@ -136,7 +136,6 @@ def start_daily_report_scheduler(bot):
                             used_space += os.path.getsize(path)
                             temp_files += 1
 
-                # ✅ جلب إجمالي المستخدمين الفعلي
                 total_users = get_total_users()
 
                 msg = get_dev_message(
@@ -152,7 +151,6 @@ def start_daily_report_scheduler(bot):
 
                 import asyncio
                 asyncio.run(bot.send_message(chat_id=OWNER_ID, text=msg, parse_mode="Markdown"))
-                # ✅ لا نعيد تعيين الإحصائيات (نحذف reset_stats)
 
             except Exception as e:
                 logger.error(f"خطأ في التقرير اليومي: {e}")
@@ -166,7 +164,6 @@ def start_daily_report_scheduler(bot):
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
 
-# ✅ إنشاء جدول المستخدمين مع created_at
 c.execute('''
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -174,7 +171,6 @@ c.execute('''
     )
 ''')
 
-# ✅ إضافة عمود created_at إذا كان غير موجود
 c.execute("PRAGMA table_info(users)")
 columns = [col[1] for col in c.fetchall()]
 if 'created_at' not in columns:
@@ -187,12 +183,9 @@ conn.commit()
 
 # ============== دوال المستخدمين ==============
 def add_user(user_id):
-    """إضافة مستخدم جديد مع وقت التسجيل"""
     try:
-        # التحقق إذا كان المستخدم موجوداً
         c.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
         if not c.fetchone():
-            # مستخدم جديد - نسجل وقت الإضافة
             c.execute("INSERT INTO users (user_id, created_at) VALUES (?, datetime('now'))", (user_id,))
             conn.commit()
             logger.info(f"✅ مستخدم جديد: {user_id}")
@@ -204,25 +197,21 @@ def add_user(user_id):
 
 
 def get_total_users():
-    """الحصول على إجمالي عدد المستخدمين"""
     c.execute("SELECT COUNT(*) FROM users")
     return c.fetchone()[0]
 
 
 def get_today_users():
-    """الحصول على عدد المستخدمين الجدد اليوم"""
     c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) = date('now')")
     return c.fetchone()[0]
 
 
 def get_week_users():
-    """الحصول على عدد المستخدمين الجدد هذا الأسبوع"""
     c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) >= date('now', '-7 days')")
     return c.fetchone()[0]
 
 
 def get_month_users():
-    """الحصول على عدد المستخدمين الجدد هذا الشهر"""
     c.execute("SELECT COUNT(*) FROM users WHERE date(created_at) >= date('now', '-30 days')")
     return c.fetchone()[0]
 
@@ -296,7 +285,6 @@ async def show_panel(update, context):
     if update.effective_user.id != OWNER_ID:
         return
 
-    # ✅ جلب الإحصائيات الفعلية
     total_users = get_total_users()
     today_users = get_today_users()
     week_users = get_week_users()
@@ -325,7 +313,7 @@ async def show_panel(update, context):
 # ============== أوامر البوت ==============
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    add_user(user_id)  # ✅ تسجيل المستخدم مع الوقت
+    add_user(user_id)
 
     channels = get_all_channels()
     if channels:
@@ -369,7 +357,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============== تحميل المحتوى ==============
 async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    add_user(user_id)  # ✅ تسجيل المستخدم مع الوقت
+    add_user(user_id)
 
     channels = get_all_channels()
     if channels:
@@ -412,9 +400,10 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_inline_buttons()
                 )
             else:
-                await update.message.reply_video(
-                    video=f,
-                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB",
+                # ✅ إرسال الفيديو كـ Document لتجاوز حد 50 ميجابايت
+                await update.message.reply_document(
+                    document=f,
+                    caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
                     reply_markup=get_inline_buttons()
                 )
 
