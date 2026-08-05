@@ -280,6 +280,18 @@ def get_channel_buttons(channels):
     return InlineKeyboardMarkup(keyboard)
 
 
+# ✅ أزرار التشغيل والتحميل للفيديو
+def get_video_buttons(video_url):
+    """إنشاء أزرار تشغيل وتحميل للفيديو"""
+    keyboard = [
+        [
+            InlineKeyboardButton("▶️ تشغيل الفيديو", url=video_url),
+            InlineKeyboardButton("📥 تحميل الفيديو", url=video_url)
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 # ============== لوحة المطور ==============
 async def show_panel(update, context):
     if update.effective_user.id != OWNER_ID:
@@ -400,11 +412,13 @@ async def direct_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=get_inline_buttons()
                 )
             else:
-                # ✅ إرسال الفيديو كـ Document (يدعم حتى 2 جيجابايت)
+                # ✅ إرسال الفيديو مع أزرار التشغيل والتحميل
+                # الحصول على رابط التحميل المؤقت للملف (للتشغيل والتحميل)
+                # نرسل الفيديو كـ Document مع أزرار إضافية
                 await update.message.reply_document(
                     document=f,
                     caption=f"{get_success()}\n📌 {platform}\n🎬 **فيديو**\n💾 {file_size:.2f} MB\n📥 اضغط لتحميل الفيديو",
-                    reply_markup=get_inline_buttons()
+                    reply_markup=get_video_buttons(url)  # ✅ أزرار تشغيل وتحميل
                 )
 
         await status_msg.delete()
