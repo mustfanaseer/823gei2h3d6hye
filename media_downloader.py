@@ -66,7 +66,8 @@ def download_image_from_url(image_url):
         return None
 
     except Exception as e:
-        logger.error(f"❌ فشل تحميل الصورة: {e}")
+        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. : {e}")
         return None
 
 
@@ -108,7 +109,8 @@ def extract_instagram_image(url):
         return None
 
     except Exception as e:
-        logger.error(f"❌ فشل استخراج الصورة: {e}")
+        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى.: {e}")
         return None
 
 
@@ -159,7 +161,8 @@ def extract_tiktok_image(url):
         return None
 
     except Exception as e:
-        logger.error(f"❌ فشل استخراج الصورة: {e}")
+        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
         return None
 
 
@@ -225,7 +228,8 @@ def download_youtube_video(url):
         return None
         
     except Exception as e:
-        logger.warning(f"⚠️ فشل تحميل YouTube: {e}")
+        logger.warning(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
         return None
 
 
@@ -313,7 +317,8 @@ def download_file(download_url):
         return None
             
     except Exception as e:
-        logger.error(f"❌ فشل تحميل الملف: {e}")
+        logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى. {e}")
         return None
 
 
@@ -372,7 +377,8 @@ def download_media(url, bot=None, owner_id=None):
         return result
     
     stats["fail_count"] += 1
-    logger.error(f"❌ فشلت جميع طرق التحميل: {url}")
+    logger.error(f"📌 قد يكون الرابط منتهي الصلاحية أو المحتوى غير متاح.
+💡 يرجى التحقق من الرابط والمحاولة مرة أخرى.: {url}")
     
     if bot and owner_id:
         try:
